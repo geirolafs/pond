@@ -72,6 +72,68 @@ it("keeps the page's og:image on sites other than Amazon", async () => {
   ]);
 });
 
+const shopPage = (jsonLd: string) =>
+  `<html><head><meta property="og:image" content="https://shop.example.com/banner.jpg"><script type="application/ld+json">${jsonLd}</script></head></html>`;
+
+it("prefers a shop's JSON-LD product image over its og:image banner", async () => {
+  const capture = await extractFrom(
+    "https://shop.example.com/records/kind-of-blue",
+    shopPage(
+      JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "Product",
+        name: "Kind of Blue",
+        image: ["/covers/kind-of-blue.jpg", "/covers/back.jpg"],
+      }),
+    ),
+  );
+
+  expect(capture.media).toEqual([
+    { url: "https://shop.example.com/covers/kind-of-blue.jpg", type: "image" },
+  ]);
+});
+
+it("finds a book cover inside a JSON-LD @graph with an ImageObject", async () => {
+  const capture = await extractFrom(
+    "https://books.example.com/thinking-in-systems",
+    shopPage(
+      JSON.stringify({
+        "@context": "https://schema.org",
+        "@graph": [
+          { "@type": "WebPage", image: "https://books.example.com/og.jpg" },
+          {
+            "@type": ["Book", "Product"],
+            image: {
+              "@type": "ImageObject",
+              url: "https://books.example.com/cover.jpg",
+            },
+          },
+        ],
+      }),
+    ),
+  );
+
+  expect(capture.media).toEqual([
+    { url: "https://books.example.com/cover.jpg", type: "image" },
+  ]);
+});
+
+it("keeps the og:image when the JSON-LD describes an article", async () => {
+  const capture = await extractFrom(
+    "https://news.example.com/story",
+    shopPage(
+      JSON.stringify({
+        "@type": "NewsArticle",
+        image: "https://news.example.com/inline.jpg",
+      }),
+    ),
+  );
+
+  expect(capture.media).toEqual([
+    { url: "https://shop.example.com/banner.jpg", type: "image" },
+  ]);
+});
+
 it("does not acquire a browser when the direct fetch succeeds", async () => {
   const renderHtml = vi.fn().mockResolvedValue(renderedHtml);
   const extractor = new WebPageExtractor({

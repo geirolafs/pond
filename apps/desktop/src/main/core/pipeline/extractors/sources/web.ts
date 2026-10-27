@@ -8,6 +8,7 @@ import metascraperLogoFavicon from "metascraper-logo-favicon";
 import metascraperPublisher from "metascraper-publisher";
 import metascraperTitle from "metascraper-title";
 import metascraperUrl from "metascraper-url";
+import { z } from "zod";
 import {
   browserUserAgent,
   renderPageHtml,
@@ -35,10 +36,72 @@ const amazonProductImage: metascraper.Rules = {
   },
 };
 
+const PRODUCT_TYPES = new Set([
+  "Product",
+  "ProductGroup",
+  "IndividualProduct",
+  "Book",
+  "MusicAlbum",
+  "MusicRelease",
+  "Periodical",
+  "PublicationIssue",
+]);
+
+const JsonLdImageRef = z.union([
+  z.string(),
+  z
+    .object({ url: z.string().optional(), contentUrl: z.string().optional() })
+    .transform((image) => image.url ?? image.contentUrl),
+]);
+const JsonLdProduct = z.object({
+  "@type": z.union([z.string(), z.array(z.string())]),
+  image: z.union([JsonLdImageRef, z.array(JsonLdImageRef)]),
+});
+const JsonLdGraph = z.object({ "@graph": z.array(z.json()) });
+
+/** Shops often point og:image at a banner; their JSON-LD product entry names the item photo or cover. */
+const jsonLdProductImage: metascraper.Rules = {
+  image: ({ htmlDom: $, url }) => {
+    for (const script of $('script[type="application/ld+json"]').toArray()) {
+      const src = productImageFromJsonLd($(script).text());
+      if (src && !src.startsWith("data:")) return new URL(src, url).href;
+    }
+    return undefined;
+  },
+};
+
+function productImageFromJsonLd(text: string): string | undefined {
+  const parsed = z.json().safeParse(safeJsonParse(text));
+  if (!parsed.success) return undefined;
+  const roots = Array.isArray(parsed.data) ? parsed.data : [parsed.data];
+  const nodes = roots.flatMap((root) => {
+    const graph = JsonLdGraph.safeParse(root);
+    return graph.success ? [root, ...graph.data["@graph"]] : [root];
+  });
+  for (const node of nodes) {
+    const product = JsonLdProduct.safeParse(node);
+    if (!product.success) continue;
+    const types = [product.data["@type"]].flat();
+    if (!types.some((type) => PRODUCT_TYPES.has(type))) continue;
+    const picked = pickString([product.data.image].flat()[0]);
+    if (picked) return picked;
+  }
+  return undefined;
+}
+
+function safeJsonParse(text: string) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
 const scrape = metascraper([
   metascraperTitle(),
   metascraperDescription(),
   amazonProductImage,
+  jsonLdProductImage,
   metascraperImage(),
   metascraperLogoFavicon(),
   metascraperAuthor(),
