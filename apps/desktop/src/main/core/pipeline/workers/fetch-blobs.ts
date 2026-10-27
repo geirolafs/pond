@@ -144,12 +144,12 @@ export async function runFetchBlobs(
     }),
   );
 
-  /* A refreshed web page whose media URLs all changed would otherwise keep the old cover first and gain a duplicate. */
+  /* When every media URL changed (a page's new cover, or signed CDN URLs that differ on each read), the old media would otherwise stay first and the save would gain duplicates. Replace only when every new download worked. */
+  const replaceKinds = [...new Set(newFiles.map((f) => f.kind))];
   const replaceStale =
-    save.source === "web" &&
     missing.length === urls.length &&
     newFiles.length === urls.length &&
-    existingFiles.some((f) => isOriginalImageKind(f.kind));
+    existingFiles.some((f) => replaceKinds.includes(f.kind));
 
   ctx.signal?.throwIfAborted();
   ctx.reportActivity?.({ phase: "saving" });
@@ -159,7 +159,7 @@ export async function runFetchBlobs(
     {
       actorReason: "pipeline:fetch-blobs",
       newFiles,
-      ...(replaceStale ? { replaceFilesWithKind: IMAGE_KIND } : {}),
+      ...(replaceStale ? { replaceFilesWithKind: replaceKinds } : {}),
     },
   );
   const saved = await readSave(saveId);
