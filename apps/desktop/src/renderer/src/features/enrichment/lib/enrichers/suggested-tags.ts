@@ -11,6 +11,10 @@ import type { Enricher } from "../types";
 const SUGGESTED_TAGS_VERSION = "suggested-tags@2";
 const SCORE_THRESHOLD = 0.3;
 const MAX_SUGGESTIONS = 5;
+// One embedding call pads every row to the longest name, so a large tag list in a single call outgrows ONNX Runtime's tensor limit.
+const VOCAB_BATCH_SIZE = 64;
+// Tags are short labels; a longer string is import debris and only pads its batch.
+const MAX_TAG_LENGTH = 100;
 
 function suggestedTagsModelVersion(): string {
   return `${SUGGESTED_TAGS_VERSION}:${embedModelVersion()}`;
@@ -36,9 +40,17 @@ async function getVocab(): Promise<VocabEntry[]> {
     const rows = TagRowsSchema.parse(await window.pond.query("tags.list", {}));
     const names = rows
       .map((r) => r.name)
-      .filter((n): n is string => !!n && n.trim().length > 0);
+      .filter(
+        (n): n is string =>
+          !!n && n.trim().length > 0 && n.length <= MAX_TAG_LENGTH,
+      );
     if (names.length === 0) return [];
-    const vecs = await embedSearchQueries(names);
+    const vecs: Float32Array[] = [];
+    for (let i = 0; i < names.length; i += VOCAB_BATCH_SIZE) {
+      vecs.push(
+        ...(await embedSearchQueries(names.slice(i, i + VOCAB_BATCH_SIZE))),
+      );
+    }
     return names.flatMap((name, i) => {
       const vec = vecs[i];
       return vec ? [{ name, vec }] : [];
