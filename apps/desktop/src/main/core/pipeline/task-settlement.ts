@@ -206,6 +206,21 @@ export async function handleFailure(
       settled: false,
     };
   }
+  /* A refresh that needs a sign-in waits a day; a save that already has files should not look like it is still saving in the meantime. */
+  if (decision.status === "blocked" && task.op === "harvest_metadata") {
+    const current = db
+      .select({ status: saves.status, files: saves.files })
+      .from(saves)
+      .where(eq(saves.id, task.saveId))
+      .get();
+    if (current?.status === "ingesting" && (current.files?.length ?? 0) > 0) {
+      await persistSave(
+        task.saveId,
+        { status: "complete", ingestCompletedAt: new Date() },
+        { actorReason: "pipeline:blocked-keep-files" },
+      );
+    }
+  }
   if (decision.status === "dead") {
     metrics.tasksFailed++;
     const current = db
