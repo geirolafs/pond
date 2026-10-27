@@ -20,9 +20,25 @@ type WebExtras = {
   faviconUrl?: string;
 };
 
+const AMAZON_HOST = /(^|\.)amazon\.[a-z]{2,3}(\.[a-z]{2})?$/;
+const AMAZON_COVER_SELECTOR = "#landingImage, #imgBlkFront, #ebooksImgBlkFront";
+
+/** Amazon product pages carry no og:image; the item photo or cover lives in the image block. */
+const amazonProductImage: metascraper.Rules = {
+  test: ({ url }) => AMAZON_HOST.test(new URL(url).hostname),
+  image: ({ htmlDom: $, url }) => {
+    const img = $(AMAZON_COVER_SELECTOR).first();
+    const src =
+      pickString(img.attr("data-old-hires")) ?? pickString(img.attr("src"));
+    if (!src || src.startsWith("data:")) return undefined;
+    return new URL(src, url).href;
+  },
+};
+
 const scrape = metascraper([
   metascraperTitle(),
   metascraperDescription(),
+  amazonProductImage,
   metascraperImage(),
   metascraperLogoFavicon(),
   metascraperAuthor(),
