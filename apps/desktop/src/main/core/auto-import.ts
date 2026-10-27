@@ -3,9 +3,11 @@ import { join, resolve, sep } from "node:path";
 import log from "electron-log/main.js";
 import { z } from "zod";
 import { libraryRoot } from "../paths";
+import { linkFromFile } from "./auto-import-link";
 import { createAutoImportWorker } from "./auto-import-worker";
 import { emitFeedback } from "./feedback";
 import { createManualSave } from "./manual-import";
+import { enqueue } from "./pipeline/enqueue";
 import { getPrefs } from "./prefs";
 
 const AutoImportLogSchema = z.object({
@@ -77,6 +79,11 @@ export async function startAutoImport(): Promise<void> {
     async ingest(input) {
       if (resolve(libraryRoot()) !== root)
         throw new Error("The import library changed.");
+      const link = await linkFromFile(input.path);
+      if (link) {
+        const saved = await enqueue(link, { trigger: "auto:importLink" });
+        return { ok: true, id: saved.id };
+      }
       return createManualSave({
         filePaths: [input.path],
         sourceId: input.sourceId,
