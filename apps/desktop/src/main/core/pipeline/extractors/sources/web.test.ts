@@ -43,6 +43,7 @@ it("saves the high-resolution cover from an Amazon product page", async () => {
       type: "image",
     },
   ]);
+  expect(capture.extras?.product).toBe(true);
 });
 
 it("falls back to the displayed Amazon image when no high-resolution one is listed", async () => {
@@ -70,6 +71,7 @@ it("keeps the page's og:image on sites other than Amazon", async () => {
   expect(capture.media).toEqual([
     { url: "https://example.com/share.jpg", type: "image" },
   ]);
+  expect(capture.extras?.product).toBeUndefined();
 });
 
 const shopPage = (jsonLd: string) =>
@@ -91,6 +93,19 @@ it("prefers a shop's JSON-LD product image over its og:image banner", async () =
   expect(capture.media).toEqual([
     { url: "https://example.com/covers/kind-of-blue.jpg", type: "image" },
   ]);
+  expect(capture.extras?.product).toBe(true);
+});
+
+it("marks a JSON-LD product page as a product even without a product image", async () => {
+  const capture = await extractFrom(
+    "https://example.com/magazines/issue-12",
+    shopPage(JSON.stringify({ "@type": "PublicationIssue", name: "Issue 12" })),
+  );
+
+  expect(capture.media).toEqual([
+    { url: "https://example.com/banner.jpg", type: "image" },
+  ]);
+  expect(capture.extras?.product).toBe(true);
 });
 
 it("finds a book cover inside a JSON-LD @graph with an ImageObject", async () => {
@@ -159,6 +174,7 @@ it("keeps the og:image when the JSON-LD describes an article", async () => {
   expect(capture.media).toEqual([
     { url: "https://example.com/banner.jpg", type: "image" },
   ]);
+  expect(capture.extras?.product).toBeUndefined();
 });
 
 it("does not acquire a browser when the direct fetch succeeds", async () => {

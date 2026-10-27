@@ -1,4 +1,5 @@
 import {
+  IconBagShopping,
   IconCalendar,
   IconCamera,
   IconDocument,
@@ -281,6 +282,7 @@ const TYPE_ICONS = new Map<string, IconComponent>([
   ["font", IconTypography],
   ["file", IconFile],
   ["link", IconGlobe],
+  ["product", IconBagShopping],
   ["text", IconText],
 ]);
 

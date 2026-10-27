@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { saves } from "../../db";
+import { webTypeKey } from "../../media-type";
 import { defineField } from "./descriptor";
 
 const TYPE_PRESETS = [
@@ -10,6 +11,7 @@ const TYPE_PRESETS = [
   { id: "font", label: "Font", value: "font" },
   { id: "file", label: "File", value: "file" },
   { id: "link", label: "Website", value: "link" },
+  { id: "product", label: "Product", value: "product" },
   { id: "text", label: "Text", value: "text" },
 ] as const;
 
@@ -20,7 +22,7 @@ export const typeField = defineField({
   group: "media",
   presets: TYPE_PRESETS,
   project: (s) =>
-    s.source === "web" ? "link" : (s.mediaType ?? "").toLowerCase(),
+    s.source === "web" ? webTypeKey(s) : (s.mediaType ?? "").toLowerCase(),
   sqlProjection: () =>
-    sql`case when ${saves.source} = 'web' then 'link' else lower(coalesce(${saves.mediaType}, '')) end`,
+    sql`case when ${saves.source} = 'web' and json_extract(${saves.rawJson}, '$.capture.extras.product') = 1 then 'product' when ${saves.source} = 'web' then 'link' else lower(coalesce(${saves.mediaType}, '')) end`,
 });

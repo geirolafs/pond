@@ -1,4 +1,5 @@
 import { sourceIdentity } from "@pond/schema/domain";
+import { webTypeKey } from "@pond/schema/media-type";
 import { onPoolDirty, pool } from "@/features/saves/pool";
 import type { Save } from "@/features/saves/types";
 import type { NlFacets } from "@/features/search/lib/nl-query";
@@ -29,11 +30,14 @@ function applySave(save: Save, sign: 1 | -1): void {
   if (identity) bump(sources, identity, sign);
   for (const tag of save.tags ?? []) bump(tags, tag.toLowerCase(), sign);
   const type =
-    save.source === "web" ? "link" : (save.mediaType ?? "").toLowerCase();
+    save.source === "web"
+      ? webTypeKey(save)
+      : (save.mediaType ?? "").toLowerCase();
   if (
     type === "image" ||
     type === "video" ||
     type === "link" ||
+    type === "product" ||
     type === "text"
   ) {
     bump(types, type, sign);

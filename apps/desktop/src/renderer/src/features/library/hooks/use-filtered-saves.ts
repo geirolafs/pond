@@ -1,3 +1,4 @@
+import { webTypeKey } from "@pond/schema/media-type";
 import { seededOrderKey } from "@shared/order-key";
 import { pickCardFile } from "@shared/save-file-names";
 import { saveDuration } from "@/features/saves/media";
@@ -165,7 +166,7 @@ function textFor(value: string | null | undefined): string {
 }
 
 function typeFor(s: Save): string {
-  if (s.source === "web") return "link";
+  if (s.source === "web") return webTypeKey(s);
   return (s.mediaType ?? s.files[0]?.kind ?? "").toLowerCase();
 }
 

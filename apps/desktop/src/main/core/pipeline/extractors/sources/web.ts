@@ -19,7 +19,10 @@ import type { Capture, ExtractInput, Extractor } from "../types";
 type WebExtras = {
   publisher?: string;
   faviconUrl?: string;
+  product?: boolean;
 };
+
+const PRODUCT_FLAG = "true";
 
 const AMAZON_HOST = /(^|\.)amazon\.[a-z]{2,3}(\.[a-z]{2})?$/;
 const AMAZON_COVER_SELECTOR = "#landingImage, #imgBlkFront, #ebooksImgBlkFront";
@@ -34,6 +37,8 @@ const amazonProductImage: metascraper.Rules = {
       resolveHttpUrl(img.attr("src"), url)
     );
   },
+  product: ({ htmlDom: $ }) =>
+    $(AMAZON_COVER_SELECTOR).length > 0 ? PRODUCT_FLAG : undefined,
 };
 
 /** A throwing rule makes metascraper skip every later image rule, so bad candidates resolve to undefined. */
@@ -72,24 +77,33 @@ const JsonLdImageRef = z.union([
 ]);
 const JsonLdProduct = z.object({
   "@type": z.union([z.string(), z.array(z.string())]),
-  image: z.union([JsonLdImageRef, z.array(JsonLdImageRef)]),
+  image: z.union([JsonLdImageRef, z.array(JsonLdImageRef)]).optional(),
 });
 const JsonLdGraph = z.object({ "@graph": z.array(z.json()) });
+const JSON_LD_SELECTOR = 'script[type="application/ld+json"]';
 
 /** Shops often point og:image at a banner; their JSON-LD product entry names the item photo or cover. */
 const jsonLdProductImage: metascraper.Rules = {
   image: ({ htmlDom: $, url }) => {
-    for (const script of $('script[type="application/ld+json"]').toArray()) {
-      for (const src of productImagesFromJsonLd($(script).text())) {
-        const resolved = resolveHttpUrl(src, url);
-        if (resolved) return resolved;
+    for (const script of $(JSON_LD_SELECTOR).toArray()) {
+      for (const product of productsFromJsonLd($(script).text())) {
+        for (const src of [product.image].flat()) {
+          const resolved = resolveHttpUrl(src, url);
+          if (resolved) return resolved;
+        }
       }
     }
     return undefined;
   },
+  product: ({ htmlDom: $ }) =>
+    $(JSON_LD_SELECTOR)
+      .toArray()
+      .some((script) => productsFromJsonLd($(script).text()).length > 0)
+      ? PRODUCT_FLAG
+      : undefined,
 };
 
-function productImagesFromJsonLd(text: string): (string | undefined)[] {
+function productsFromJsonLd(text: string): z.infer<typeof JsonLdProduct>[] {
   const parsed = z.json().safeParse(safeJsonParse(text));
   if (!parsed.success) return [];
   const roots = Array.isArray(parsed.data) ? parsed.data : [parsed.data];
@@ -101,8 +115,7 @@ function productImagesFromJsonLd(text: string): (string | undefined)[] {
     const product = JsonLdProduct.safeParse(node);
     if (!product.success) return [];
     const types = [product.data["@type"]].flat();
-    if (!types.some((type) => PRODUCT_TYPES.has(type))) return [];
-    return [product.data.image].flat();
+    return types.some((type) => PRODUCT_TYPES.has(type)) ? [product.data] : [];
   });
 }
 
@@ -180,6 +193,7 @@ export class WebPageExtractor implements Extractor {
     const extras: WebExtras = {};
     if (publisher) extras.publisher = publisher;
     if (faviconUrl) extras.faviconUrl = faviconUrl;
+    if (meta.product === PRODUCT_FLAG) extras.product = true;
 
     const title = pickString(meta.title);
     const description = pickString(meta.description);

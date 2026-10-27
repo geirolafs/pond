@@ -116,6 +116,8 @@ export const TYPE_SYNONYMS = new Map<string, string>([
   ["articles", "link"],
   ["website", "link"],
   ["websites", "link"],
+  ["product", "product"],
+  ["products", "product"],
   ["text", "text"],
   ["note", "text"],
   ["notes", "text"],

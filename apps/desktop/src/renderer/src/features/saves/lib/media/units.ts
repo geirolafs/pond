@@ -1,4 +1,5 @@
 import type { TweetCover } from "@pond/schema/db";
+import { webTypeKey } from "@pond/schema/media-type";
 import {
   classifyLibraryFile,
   requiresGeneratedImagePreview,
@@ -339,7 +340,9 @@ export function deriveTypeLabel(
   file: SaveFile | null,
   save: Save,
 ): string | null {
-  if (save.source === "web") return "Web";
+  if (save.source === "web") {
+    return webTypeKey(save) === "product" ? "Product" : "Web";
+  }
   if (save.source === "github") return "Repository";
   if (save.files.some((f) => f.kind === ARTICLE_KIND)) return "Article";
   if (arenaBlockClass(save) === "text") return "Text";

@@ -58,9 +58,41 @@ const examples: SaveLike[] = [
   },
 ];
 
-function fixture() {
+const webExamples: SaveLike[] = [
+  {
+    id: "shop",
+    source: "web",
+    url: "https://example.com/records/kind-of-blue",
+    title: "Kind of Blue",
+    tags: [],
+    folderIds: [],
+    mediaType: "link",
+    rawJson: {
+      capture: {
+        id: "shop",
+        source: "web",
+        url: "https://example.com/records/kind-of-blue",
+        media: [],
+        extras: { product: true },
+      },
+      extractorId: "web-page",
+      extractedAt: "2026-10-27T00:00:00.000Z",
+    },
+  },
+  {
+    id: "site",
+    source: "web",
+    url: "https://example.com",
+    title: "Example",
+    tags: [],
+    folderIds: [],
+    mediaType: "link",
+  },
+];
+
+function fixture(rows: SaveLike[] = examples) {
   const db = new Database(":memory:");
-  db.exec(`CREATE TABLE saves (id TEXT, title TEXT, tags TEXT, width INTEGER, height INTEGER, dominant_colors TEXT, sensitive_score REAL, files TEXT);
+  db.exec(`CREATE TABLE saves (id TEXT, title TEXT, tags TEXT, width INTEGER, height INTEGER, dominant_colors TEXT, sensitive_score REAL, files TEXT, source TEXT, media_type TEXT, raw_json TEXT);
     CREATE TABLE folders (id TEXT PRIMARY KEY, name TEXT);
     CREATE TABLE folder_metadata (folder_id TEXT PRIMARY KEY, description TEXT);
     CREATE TABLE save_folders (save_id TEXT, folder_id TEXT);
@@ -76,16 +108,21 @@ function fixture() {
   );
   db.prepare("INSERT INTO folders VALUES (?, ?)").run("FolderA", "Folder A");
   db.prepare("INSERT INTO folders VALUES (?, ?)").run("FolderB", "Folder B");
-  for (const save of examples) {
-    db.prepare("INSERT INTO saves VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(
+  for (const save of rows) {
+    db.prepare(
+      "INSERT INTO saves VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    ).run(
       save.id,
       save.title,
       JSON.stringify(save.tags),
-      save.width,
-      save.height,
+      save.width ?? null,
+      save.height ?? null,
       JSON.stringify(save.dominantColors ?? []),
       save.sensitiveScore ?? null,
       "[]",
+      save.source,
+      save.mediaType ?? null,
+      save.rawJson ? JSON.stringify(save.rawJson) : null,
     );
     db.prepare("INSERT INTO saves_fts VALUES (?, ?)").run(save.id, save.title);
     for (const folder of save.folderIds ?? [])
@@ -208,6 +245,38 @@ describe.skipIf(!nativeSqliteAvailable())("filter engine parity", () => {
       db.close();
     }
   });
+
+  it.each(["product", "link"])(
+    "agrees with in-memory evaluation for the %s type",
+    (type) => {
+      const rows = [...examples, ...webExamples];
+      const query: Query = {
+        combinator: "and",
+        rules: [{ field: "type", operator: "eq", value: type }],
+      };
+      const db = fixture(rows);
+      try {
+        const where = buildWhere(query);
+        if (!where) throw new Error("Expected a filter predicate");
+        const compiled = new SQLiteSyncDialect().sqlToQuery(where);
+        const found = z
+          .array(z.object({ id: z.string() }))
+          .parse(
+            db
+              .prepare(`SELECT id FROM saves WHERE ${compiled.sql} ORDER BY id`)
+              .all(...compiled.params),
+          );
+        expect(found.map((row) => row.id)).toEqual([
+          type === "product" ? "shop" : "site",
+        ]);
+        expect(
+          rows.filter((save) => matches(query, save)).map((save) => save.id),
+        ).toEqual([type === "product" ? "shop" : "site"]);
+      } finally {
+        db.close();
+      }
+    },
+  );
 
   it("evaluates keyword precedence, phrases and complements on the real index", () => {
     const db = fixture();

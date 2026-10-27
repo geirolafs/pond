@@ -5,6 +5,7 @@ import {
 } from "@pond/schema/filters/fields";
 import { FIELD_META } from "@pond/schema/filters/meta";
 import type { FieldId, Predicate } from "@pond/schema/filters/types";
+import { webTypeKey } from "@pond/schema/media-type";
 import type { MenuItemSpec } from "@pond/ui";
 import { copyId, copyValue } from "@/features/saves/lib/actions";
 import { saveLibraryBridge } from "@/features/saves/lib/library-bridge";
@@ -87,7 +88,9 @@ export function factFilters(
         );
       }
       const type =
-        save.source === "web" ? "link" : (save.mediaType ?? "").toLowerCase();
+        save.source === "web"
+          ? webTypeKey(save)
+          : (save.mediaType ?? "").toLowerCase();
       const typeLabel = presetLabel("type", type);
       if (typeLabel && typeLabel !== fact.value) {
         out.push(

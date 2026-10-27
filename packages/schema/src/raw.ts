@@ -137,6 +137,8 @@ export interface CaptureExtras {
   dominantColor?: string;
   externalLink?: string;
   faviconUrl?: string;
+  /** The web page sells a product, book, album or magazine issue. */
+  product?: boolean;
   publisher?: string;
   replyParentUnavailable?: boolean;
   replyRecaptureQueued?: boolean;
