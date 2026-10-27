@@ -19,6 +19,7 @@ export function slimRawJson(raw: RawJson | null | undefined): RawJson | null {
   if (cap.author?.avatarUrl)
     capture.author = { avatarUrl: cap.author.avatarUrl };
   if (cap.duration != null) capture.duration = cap.duration;
+  if (cap.extras?.product) capture.extras = { product: true };
 
   const slim: RawJson = {
     capture,

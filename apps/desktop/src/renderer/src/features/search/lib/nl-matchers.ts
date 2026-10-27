@@ -1,5 +1,5 @@
-import { MEDIA_TYPES } from "@pond/schema/db";
 import { COLOR_PRESETS } from "@pond/schema/filters/color";
+import { FIELD_META } from "@pond/schema/filters/meta";
 import type { FieldId, Predicate } from "@pond/schema/filters/types";
 import { predicateIsActive } from "@/features/search/lib/filter-helpers";
 import type { AskSort, NlFacets } from "@/features/search/lib/nl-query";
@@ -34,7 +34,7 @@ export function buildCandidates(facets: NlFacets): Candidate[] {
   };
 
   for (const [word, type] of TYPE_SYNONYMS) {
-    if (MEDIA_TYPES.some((mediaType) => mediaType === type)) {
+    if (FIELD_META.type.presets?.some((preset) => preset.value === type)) {
       push(word, "type", type);
     }
   }

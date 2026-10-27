@@ -61,3 +61,13 @@ describe("compileStageA — dates compose with the rest of the compiler", () => 
     );
   });
 });
+
+describe("compileStageA — product type", () => {
+  it("reads 'products' as the Product type", () => {
+    const res = compileStageA("products", EMPTY_FACETS);
+    expect(res.query.rules).toEqual([
+      { field: "type", operator: "eq", value: "product" },
+    ]);
+    expect(res.residual).toBe("");
+  });
+});
