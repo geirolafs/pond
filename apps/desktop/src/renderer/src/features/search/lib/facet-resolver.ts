@@ -11,6 +11,8 @@ interface VocabEntry {
 }
 
 const MATCH_THRESHOLD = 0.55;
+// One embedding call pads every row to the longest value, so one long tag or creator name inflates the whole batch.
+const MAX_VALUE_LENGTH = 100;
 
 let vocabSignature = "";
 let vocabPromise: Promise<VocabEntry[]> | null = null;
@@ -33,10 +35,11 @@ async function buildVocab(facets: NlFacets): Promise<VocabEntry[]> {
   for (const v of facets.creators.slice(0, 200))
     items.push({ field: "creator", value: v });
 
-  if (items.length === 0) return [];
+  const usable = items.filter((i) => i.value.length <= MAX_VALUE_LENGTH);
+  if (usable.length === 0) return [];
   const { embedTexts } = await import("@/features/enrichment/embeddings");
-  const vecs = await embedTexts(items.map((i) => i.value));
-  return items.flatMap((item, idx) => {
+  const vecs = await embedTexts(usable.map((i) => i.value));
+  return usable.flatMap((item, idx) => {
     const vec = vecs[idx];
     return vec ? [{ field: item.field, value: item.value, vec }] : [];
   });
