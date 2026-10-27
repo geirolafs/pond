@@ -144,6 +144,13 @@ export async function runFetchBlobs(
     }),
   );
 
+  /* A refreshed web page whose media URLs all changed would otherwise keep the old cover first and gain a duplicate. */
+  const replaceStale =
+    save.source === "web" &&
+    missing.length === urls.length &&
+    newFiles.length === urls.length &&
+    existingFiles.some((f) => isOriginalImageKind(f.kind));
+
   ctx.signal?.throwIfAborted();
   ctx.reportActivity?.({ phase: "saving" });
   await persistSave(
@@ -152,10 +159,11 @@ export async function runFetchBlobs(
     {
       actorReason: "pipeline:fetch-blobs",
       newFiles,
+      ...(replaceStale ? { replaceFilesWithKind: IMAGE_KIND } : {}),
     },
   );
   const saved = await readSave(saveId);
-  await ensureSaveThumbnail(saveId, saved);
+  await ensureSaveThumbnail(saveId, saved, { force: replaceStale });
   log.info("[pond pipeline:fetch-blobs] wrote", {
     saveId,
     count: newFiles.length,
