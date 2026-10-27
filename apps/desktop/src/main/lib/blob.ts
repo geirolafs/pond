@@ -110,17 +110,45 @@ function nameFor(
 }
 
 const ICO_HEADER = Buffer.from([0x00, 0x00, 0x01, 0x00]);
+const PNG_SIGNATURE = Buffer.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+]);
+const ICO_ENTRY_BYTES = 16;
 
-// Sites sometimes serve broken bytes under an image content type. sharp has
-// no ICO decoder, so ICO files are only checked by their header.
+// Sites sometimes serve broken bytes under an image content type, so decode
+// the pixels instead of trusting the header.
 export async function isReadableImage(buf: Buffer): Promise<boolean> {
-  if (buf.subarray(0, 4).equals(ICO_HEADER)) return buf.byteLength > 6;
+  if (buf.subarray(0, 4).equals(ICO_HEADER)) return isReadableIco(buf);
   try {
-    const meta = await sharp(buf).metadata();
-    return Boolean(meta.width && meta.height);
+    await sharp(buf).stats();
+    return true;
   } catch {
     return false;
   }
+}
+
+// sharp has no ICO decoder. Check that every entry points at bytes inside
+// the file, and decode the entries that hold a PNG.
+async function isReadableIco(buf: Buffer): Promise<boolean> {
+  if (buf.byteLength < 6) return false;
+  const count = buf.readUInt16LE(4);
+  if (count === 0 || buf.byteLength < 6 + count * ICO_ENTRY_BYTES) {
+    return false;
+  }
+  for (let i = 0; i < count; i++) {
+    const entry = 6 + i * ICO_ENTRY_BYTES;
+    const size = buf.readUInt32LE(entry + 8);
+    const offset = buf.readUInt32LE(entry + 12);
+    if (size === 0 || offset + size > buf.byteLength) return false;
+    const payload = buf.subarray(offset, offset + size);
+    if (
+      payload.subarray(0, 8).equals(PNG_SIGNATURE) &&
+      !(await isReadableImage(payload))
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 async function fetchSmallImageToTxFile(
@@ -152,7 +180,13 @@ async function fetchSmallImageToTxFile(
     return { miss: "permanent" };
   }
 
-  const buf = Buffer.from(await res.arrayBuffer());
+  let buf: Buffer;
+  try {
+    buf = Buffer.from(await res.arrayBuffer());
+  } catch (err) {
+    log.warn(`[pond blob] ${baseName} body read failed`, imageUrl, err);
+    return { miss: "transient" };
+  }
   if (buf.byteLength > MAX_AVATAR_BYTES) {
     log.warn(
       `[pond blob] ${baseName} declared size mismatch, skipping`,
