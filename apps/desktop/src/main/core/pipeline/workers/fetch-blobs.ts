@@ -146,10 +146,20 @@ export async function runFetchBlobs(
 
   /* When every media URL changed (a page's new cover, or signed CDN URLs that differ on each read), the old media would otherwise stay first and the save would gain duplicates. Replace only when every new download worked. */
   const replaceKinds = [...new Set(newFiles.map((f) => f.kind))];
-  const replaceStale =
+  const allChanged =
     missing.length === urls.length &&
-    newFiles.length === urls.length &&
     existingFiles.some((f) => replaceKinds.includes(f.kind));
+  /* Writing a partial set would leave old and new media side by side, and the retry would then see only some URLs as missing and never replace. */
+  if (allChanged && transientMisses > 0) {
+    throw new TransientError(
+      `fetch-blobs: ${transientMisses}/${missing.length} media still pending`,
+    );
+  }
+  const replaceStale = allChanged && newFiles.length === urls.length;
+  /* Posters are matched to videos by position, so new videos need new posters. */
+  if (replaceStale && replaceKinds.includes("video")) {
+    replaceKinds.push("poster");
+  }
 
   ctx.signal?.throwIfAborted();
   ctx.reportActivity?.({ phase: "saving" });
