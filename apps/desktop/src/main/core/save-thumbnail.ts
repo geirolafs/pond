@@ -1,6 +1,7 @@
 import type { Save } from "@pond/schema/db";
 import { saves } from "@pond/schema/db";
 import {
+  isOriginalImageKind,
   primaryOriginalPath,
   TEXT_THUMBNAIL_WEBP_FILE,
   THUMBNAIL_DARK_KIND,
@@ -25,7 +26,10 @@ function thumbnailWriteArgs(
   height?: number,
   custom = false,
 ): WriteFileArgs {
-  const primary = primaryOriginalPath(files);
+  // A refreshed web save lists its new image after the archive files.
+  const primary =
+    files.find((file) => isOriginalImageKind(file.kind))?.path ??
+    primaryOriginalPath(files);
   const write: WriteFileArgs = {
     kind: THUMBNAIL_KIND,
     filename: primary ? thumbnailFilename(primary) : TEXT_THUMBNAIL_WEBP_FILE,
