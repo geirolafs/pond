@@ -5,6 +5,7 @@ import { getDb } from "../../db";
 import { readSave } from "../pipeline/workers/apply";
 import {
   fetchSourceIcon,
+  hasReadableSourceIcon,
   hasSourceIcon,
 } from "../pipeline/workers/source-icon";
 
@@ -27,31 +28,35 @@ export async function backfillSourceIcons(): Promise<{
     )
     .all();
 
-  const missing = rows.filter((r) => !hasSourceIcon(r.files)).map((r) => r.id);
-  if (missing.length === 0) return { ok: true, written: 0 };
+  if (rows.length === 0) return { ok: true, written: 0 };
 
+  let candidates = 0;
   let written = 0;
   let cursor = 0;
   const runLane = async (): Promise<void> => {
-    while (cursor < missing.length) {
-      const id = missing[cursor++];
-      if (!id) continue;
+    while (cursor < rows.length) {
+      const row = rows[cursor++];
+      if (!row) continue;
       try {
-        const save = await readSave(id);
+        const stored = hasSourceIcon(row.files);
+        if (stored && (await hasReadableSourceIcon(row.id, row.files))) {
+          continue;
+        }
+        candidates += 1;
+        const save = await readSave(row.id);
         if (!save) continue;
-        if (await fetchSourceIcon(id, save)) written += 1;
+        if (await fetchSourceIcon(row.id, save, { replace: stored })) {
+          written += 1;
+        }
       } catch (err) {
-        log.warn("[pond source-icon-backfill] failed", id, err);
+        log.warn("[pond source-icon-backfill] failed", row.id, err);
       }
     }
   };
   await Promise.all(
-    Array.from({ length: Math.min(CONCURRENCY, missing.length) }, runLane),
+    Array.from({ length: Math.min(CONCURRENCY, rows.length) }, runLane),
   );
 
-  log.info("[pond source-icon-backfill] done", {
-    candidates: missing.length,
-    written,
-  });
+  log.info("[pond source-icon-backfill] done", { candidates, written });
   return { ok: true, written };
 }
