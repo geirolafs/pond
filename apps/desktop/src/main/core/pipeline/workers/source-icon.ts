@@ -1,5 +1,6 @@
 import type { Save } from "@pond/schema/db";
 import type { RawJson } from "@pond/schema/raw";
+import type { TxSaveFile } from "@pond/schema/tx";
 import log from "electron-log/main.js";
 import { z } from "zod";
 import { fetchSourceIconToTxFile } from "../../../lib/blob";
@@ -20,12 +21,9 @@ export async function fetchSourceIcon(
 ): Promise<boolean> {
   if (hasSourceIcon(save.files)) return false;
 
-  const iconUrl = pickFaviconUrl(save);
-  if (!iconUrl) return false;
-
-  const outcome = await fetchSourceIconToTxFile(iconUrl);
-  if (!("file" in outcome)) return false;
-  const tx = outcome.file;
+  const fetched = await fetchFirstIcon(faviconUrls(save));
+  if (!fetched) return false;
+  const { iconUrl, file: tx } = fetched;
   const iconFile: WriteFileArgs = {
     kind: SOURCE_ICON_KIND,
     filename: tx.filename,
@@ -46,8 +44,22 @@ export async function fetchSourceIcon(
   return true;
 }
 
-function pickFaviconUrl(save: Save): string | null {
-  return scrapedFaviconUrl(save.rawJson) ?? fallbackFaviconUrl(save.url);
+async function fetchFirstIcon(
+  urls: string[],
+): Promise<{ iconUrl: string; file: TxSaveFile } | null> {
+  for (const iconUrl of urls) {
+    const outcome = await fetchSourceIconToTxFile(iconUrl);
+    if ("file" in outcome) return { iconUrl, file: outcome.file };
+  }
+  return null;
+}
+
+function faviconUrls(save: Save): string[] {
+  const urls = [
+    scrapedFaviconUrl(save.rawJson),
+    fallbackFaviconUrl(save.url),
+  ].filter((url): url is string => url !== null);
+  return [...new Set(urls)];
 }
 
 function scrapedFaviconUrl(rawJson: RawJson | null): string | null {

@@ -6,6 +6,7 @@ import {
 } from "@shared/save-file-names";
 import log from "electron-log/main.js";
 import pLimit from "p-limit";
+import sharp from "sharp";
 import {
   DownloadSizeError,
   fetchDownload,
@@ -108,6 +109,20 @@ function nameFor(
   return harvestedFilename("image", index, ext);
 }
 
+const ICO_HEADER = Buffer.from([0x00, 0x00, 0x01, 0x00]);
+
+// Sites sometimes serve broken bytes under an image content type. sharp has
+// no ICO decoder, so ICO files are only checked by their header.
+export async function isReadableImage(buf: Buffer): Promise<boolean> {
+  if (buf.subarray(0, 4).equals(ICO_HEADER)) return buf.byteLength > 6;
+  try {
+    const meta = await sharp(buf).metadata();
+    return Boolean(meta.width && meta.height);
+  } catch {
+    return false;
+  }
+}
+
 async function fetchSmallImageToTxFile(
   imageUrl: string,
   baseName: string,
@@ -150,6 +165,11 @@ async function fetchSmallImageToTxFile(
   const mime = res.headers.get("content-type")?.split(";")[0]?.trim() ?? null;
   if (mime && !mime.startsWith("image/")) {
     log.warn(`[pond blob] ${baseName} not an image, skipping`, mime, imageUrl);
+    return { miss: "permanent" };
+  }
+
+  if (!(await isReadableImage(buf))) {
+    log.warn(`[pond blob] ${baseName} not a readable image`, imageUrl);
     return { miss: "permanent" };
   }
 
