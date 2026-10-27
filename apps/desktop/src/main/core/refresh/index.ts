@@ -6,6 +6,7 @@ import { getDb } from "../../db";
 import { saveFile } from "../../paths";
 import { persistSave } from "../persist-save";
 import { resetTasksForSave } from "../pipeline/enqueue";
+import { createPendingTasks } from "../pipeline/enqueue-scheduling";
 import { withInteractivePriority } from "../pipeline/priority";
 import { createQueueGeneration } from "../pipeline/queue-generations";
 import { kickReconciler } from "../pipeline/reconciler-client";
@@ -90,8 +91,44 @@ export async function refreshSave(
       .run();
 
     if ((harvest.changes ?? 0) === 0) {
-      log.warn("[pond refresh] no harvest_metadata task", saveId);
-      return { ok: false, reason: "internal_error" };
+      // Saves read back from the library folder have no task rows, since
+      // tasks live only in the local index. Seed the source's full plan.
+      const seeded = createPendingTasks(
+        saveId,
+        current.source,
+        now,
+        "user:refresh",
+        undefined,
+        generationId,
+      ).map((row) =>
+        row.op === "harvest_metadata"
+          ? { ...row, payload: withInteractivePriority({ force: true }) }
+          : row,
+      );
+      const hasTasks = db
+        .select({ id: tasks.id })
+        .from(tasks)
+        .where(eq(tasks.saveId, saveId))
+        .get();
+      if (hasTasks || !seeded.some((row) => row.op === "harvest_metadata")) {
+        log.warn("[pond refresh] no harvest_metadata task", saveId);
+        return { ok: false, reason: "internal_error" };
+      }
+      db.insert(tasks).values(seeded).run();
+    } else {
+      // The new metadata can point at different media; fetch_blobs only
+      // downloads what is not on disk yet.
+      db.update(tasks)
+        .set({
+          status: "pending",
+          attempts: 0,
+          generationId,
+          lastError: null,
+          nextRunAt: now,
+          updatedAt: now,
+        })
+        .where(and(eq(tasks.saveId, saveId), eq(tasks.op, "fetch_blobs")))
+        .run();
     }
 
     await persistSave(
