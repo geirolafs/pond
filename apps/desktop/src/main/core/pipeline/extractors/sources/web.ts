@@ -29,12 +29,29 @@ const amazonProductImage: metascraper.Rules = {
   test: ({ url }) => AMAZON_HOST.test(new URL(url).hostname),
   image: ({ htmlDom: $, url }) => {
     const img = $(AMAZON_COVER_SELECTOR).first();
-    const src =
-      pickString(img.attr("data-old-hires")) ?? pickString(img.attr("src"));
-    if (!src || src.startsWith("data:")) return undefined;
-    return new URL(src, url).href;
+    return (
+      resolveHttpUrl(img.attr("data-old-hires"), url) ??
+      resolveHttpUrl(img.attr("src"), url)
+    );
   },
 };
+
+/** A throwing rule makes metascraper skip every later image rule, so bad candidates resolve to undefined. */
+function resolveHttpUrl(
+  src: string | undefined,
+  base: string,
+): string | undefined {
+  const picked = pickString(src);
+  if (!picked) return undefined;
+  try {
+    const resolved = new URL(picked, base);
+    return resolved.protocol === "http:" || resolved.protocol === "https:"
+      ? resolved.href
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 const PRODUCT_TYPES = new Set([
   "Product",
@@ -63,30 +80,30 @@ const JsonLdGraph = z.object({ "@graph": z.array(z.json()) });
 const jsonLdProductImage: metascraper.Rules = {
   image: ({ htmlDom: $, url }) => {
     for (const script of $('script[type="application/ld+json"]').toArray()) {
-      const src = productImageFromJsonLd($(script).text());
-      if (src && !src.startsWith("data:")) return new URL(src, url).href;
+      for (const src of productImagesFromJsonLd($(script).text())) {
+        const resolved = resolveHttpUrl(src, url);
+        if (resolved) return resolved;
+      }
     }
     return undefined;
   },
 };
 
-function productImageFromJsonLd(text: string): string | undefined {
+function productImagesFromJsonLd(text: string): (string | undefined)[] {
   const parsed = z.json().safeParse(safeJsonParse(text));
-  if (!parsed.success) return undefined;
+  if (!parsed.success) return [];
   const roots = Array.isArray(parsed.data) ? parsed.data : [parsed.data];
   const nodes = roots.flatMap((root) => {
     const graph = JsonLdGraph.safeParse(root);
     return graph.success ? [root, ...graph.data["@graph"]] : [root];
   });
-  for (const node of nodes) {
+  return nodes.flatMap((node) => {
     const product = JsonLdProduct.safeParse(node);
-    if (!product.success) continue;
+    if (!product.success) return [];
     const types = [product.data["@type"]].flat();
-    if (!types.some((type) => PRODUCT_TYPES.has(type))) continue;
-    const picked = pickString([product.data.image].flat()[0]);
-    if (picked) return picked;
-  }
-  return undefined;
+    if (!types.some((type) => PRODUCT_TYPES.has(type))) return [];
+    return [product.data.image].flat();
+  });
 }
 
 function safeJsonParse(text: string) {
