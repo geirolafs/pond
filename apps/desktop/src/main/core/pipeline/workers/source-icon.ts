@@ -63,7 +63,7 @@ export async function fetchSourceIcon(
     {
       actorReason: "pipeline:source-icon",
       newFiles,
-      ...(replace ? { replaceFilesWithKind: SOURCE_ICON_KIND } : {}),
+      replaceFilesWithKind: replace ? SOURCE_ICON_KIND : undefined,
     },
   );
   log.info(
