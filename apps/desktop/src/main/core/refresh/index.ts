@@ -1,6 +1,6 @@
 import { rm } from "node:fs/promises";
 import { saves, tasks } from "@pond/schema/db";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, ne, or } from "drizzle-orm";
 import log from "electron-log/main.js";
 import { getDb } from "../../db";
 import { saveFile } from "../../paths";
@@ -91,7 +91,9 @@ export async function refreshSave(
 
     // The new metadata can point at different media; fetch_blobs only
     // downloads what is not on disk yet, and ensure_poster only builds
-    // posters that are missing.
+    // posters that are missing. Tasks that are not done also rerun: a
+    // blocked refresh restores the save, which sweeps its waiting tasks
+    // to dead, and the save only completes once every task is done.
     db.update(tasks)
       .set({
         status: "pending",
@@ -104,7 +106,11 @@ export async function refreshSave(
       .where(
         and(
           eq(tasks.saveId, saveId),
-          inArray(tasks.op, ["fetch_blobs", "ensure_poster"]),
+          ne(tasks.op, "harvest_metadata"),
+          or(
+            inArray(tasks.op, ["fetch_blobs", "ensure_poster"]),
+            ne(tasks.status, "done"),
+          ),
         ),
       )
       .run();
