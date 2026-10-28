@@ -1,4 +1,10 @@
-import { type Source, saves, type Task, tasks } from "@pond/schema/db";
+import {
+  queueGenerations,
+  type Source,
+  saves,
+  type Task,
+  tasks,
+} from "@pond/schema/db";
 import type { PipelineTaskEvent } from "@pond/schema/events";
 import { and, eq, inArray } from "drizzle-orm";
 import log from "electron-log/main.js";
@@ -214,10 +220,23 @@ export async function handleFailure(
       .where(eq(saves.id, task.saveId))
       .get();
     if (current?.status === "ingesting" && (current.files?.length ?? 0) > 0) {
+      /* The renderer tells the user to sign in only when the block came from a refresh they asked for. */
+      const generation = task.generationId
+        ? db
+            .select({ kind: queueGenerations.kind })
+            .from(queueGenerations)
+            .where(eq(queueGenerations.id, task.generationId))
+            .get()
+        : undefined;
       await persistSave(
         task.saveId,
         { status: "complete", ingestCompletedAt: new Date() },
-        { actorReason: "pipeline:blocked-keep-files" },
+        {
+          actorReason:
+            generation?.kind === "refresh"
+              ? "pipeline:refresh-blocked"
+              : "pipeline:blocked-keep-files",
+        },
       );
     }
   }

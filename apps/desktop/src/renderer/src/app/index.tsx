@@ -23,6 +23,7 @@ import { useHydrateFolders } from "../features/library/state/folders";
 import { syncPrimaryFromPath } from "../features/saves/lib/save-nav";
 import { ThemeApplier } from "../features/settings/effects/theme-applier";
 import { UiSounds } from "../features/settings/effects/ui-sounds";
+import { RefreshBlockedToast } from "../features/sources/effects/refresh-blocked-toast";
 import { SyncStatusBridge } from "../features/sources/effects/sync-status-bridge";
 import { routeTree } from "../routeTree.gen";
 import { ToastHost } from "../shared/components/toast-host";
@@ -181,6 +182,7 @@ function LibraryApp() {
               <FishOpenBridge />
               <SyncStatusBridge />
               <ExtensionCaptureToast />
+              <RefreshBlockedToast />
               <EnrichmentSweep />
               <BootScreen />
               <SetupHost />
