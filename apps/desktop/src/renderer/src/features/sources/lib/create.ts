@@ -12,7 +12,10 @@ export const WATCH_MENU_SOURCES: readonly Source[] = CONNECTABLE.filter(
   (source) => WATCHABLE.includes(source),
 );
 
-export async function startConnect(source: Source): Promise<void> {
+export async function startConnect(
+  source: Source,
+  whenConnected: (() => void) | null = null,
+): Promise<void> {
   let connected: string[] = [];
   try {
     const result = await window.pond.query("accounts.list", {});
@@ -22,7 +25,7 @@ export async function startConnect(source: Source): Promise<void> {
   } catch {
     connected = [];
   }
-  connectFlow.start(source, connected);
+  connectFlow.start(source, connected, whenConnected);
   sourceFlow.open("connect-wait");
 }
 

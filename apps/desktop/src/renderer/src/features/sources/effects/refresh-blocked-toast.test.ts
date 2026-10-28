@@ -8,13 +8,30 @@ import { notifyRefreshBlocked } from "./refresh-blocked-toast";
 
 let notices: NotifyOptions[] = [];
 let connects: Source[] = [];
+let whenConnected: (() => void) | null = null;
+let refreshed: string[] = [];
+let closed = 0;
+let closedToasts: string[] = [];
 const deps = {
   notify: (options: NotifyOptions) => {
     notices.push(options);
     return options.id;
   },
-  startConnect: async (source: Source) => {
+  startConnect: async (
+    source: Source,
+    callback: (() => void) | null = null,
+  ) => {
     connects.push(source);
+    whenConnected = callback;
+  },
+  refreshSave: (id: string) => {
+    refreshed.push(id);
+  },
+  closeConnect: () => {
+    closed += 1;
+  },
+  closeToast: (id: string) => {
+    closedToasts.push(id);
   },
 };
 
@@ -37,6 +54,10 @@ function action(overrides: Partial<WireSyncAction> = {}): WireSyncAction {
 beforeEach(() => {
   notices = [];
   connects = [];
+  whenConnected = null;
+  refreshed = [];
+  closed = 0;
+  closedToasts = [];
   pool.clear();
   const save = normalise({
     id: "post",
@@ -51,9 +72,19 @@ beforeEach(() => {
 it("asks the user to sign in to the save's source", () => {
   notifyRefreshBlocked(action(), deps);
   expect(notices).toHaveLength(1);
-  expect(notices[0]?.title).toBe("Sign in to Instagram to refresh");
+  expect(notices[0]?.title).toBe("Instagram needs a sign-in");
   notices[0]?.action?.onClick();
   expect(connects).toEqual(["instagram"]);
+  expect(closedToasts).toEqual(["refresh-blocked"]);
+  expect(refreshed).toEqual([]);
+});
+
+it("refreshes the save and closes the dialog once the sign-in succeeds", () => {
+  notifyRefreshBlocked(action(), deps);
+  notices[0]?.action?.onClick();
+  whenConnected?.();
+  expect(refreshed).toEqual(["post"]);
+  expect(closed).toBe(1);
 });
 
 it("stays quiet for blocks that did not come from a refresh", () => {

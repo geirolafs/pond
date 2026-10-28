@@ -35,8 +35,16 @@ const store = new Store<ConnectFlowState>({
   account: null,
 });
 
+/** Kept outside the store: a callback is not state any view renders. */
+let onConnected: (() => void) | null = null;
+
 export const connectFlow = {
-  start(source: Source, connectedIds: Iterable<string>): void {
+  start(
+    source: Source,
+    connectedIds: Iterable<string>,
+    whenConnected: (() => void) | null = null,
+  ): void {
+    onConnected = whenConnected;
     store.setState(() => ({
       source,
       waiting: source,
@@ -58,7 +66,11 @@ export const connectFlow = {
     store.setState((s) =>
       s.completed ? s : { ...s, completed: true, problem: null, account },
     );
-    if (!already) playUiSuccess();
+    if (already) return;
+    playUiSuccess();
+    const callback = onConnected;
+    onConnected = null;
+    callback?.();
   },
   /** Success arrives through the `sessionImported` broadcast the arrival hook already listens for. */
   async submitHandle(handle: string): Promise<void> {
@@ -81,6 +93,7 @@ export const connectFlow = {
     markProblem(source, problemForReason(reason));
   },
   clear(): void {
+    onConnected = null;
     const waiting = store.state.waiting;
     store.setState((s) => (s.waiting === null ? s : { ...s, waiting: null }));
     if (waiting) void window.pond.clearPendingSession(waiting);

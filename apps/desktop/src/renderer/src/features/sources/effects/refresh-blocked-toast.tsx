@@ -3,16 +3,34 @@ import type { WireSyncAction } from "@shared/wire";
 import { useEffect } from "react";
 import { pool } from "@/features/saves/state/pool";
 import { startConnect } from "@/features/sources/lib/create";
-import { notify } from "@/shared/lib/toast";
+import { connectFlow } from "@/features/sources/state/connect-flow";
+import { sourceFlow } from "@/features/sources/state/source-flow";
+import { notify, toastManager } from "@/shared/lib/toast";
 
 const REFRESH_BLOCKED_TIMEOUT_MS = 10_000;
+/** Long enough to see the connected state before the dialog closes. */
+const CLOSE_AFTER_CONNECT_MS = 1_200;
 
 interface RefreshBlockedDeps {
   notify: typeof notify;
   startConnect: typeof startConnect;
+  refreshSave: (id: string) => void;
+  closeConnect: () => void;
+  closeToast: (id: string) => void;
 }
 
-const liveDeps: RefreshBlockedDeps = { notify, startConnect };
+const liveDeps: RefreshBlockedDeps = {
+  notify,
+  closeToast: (id) => toastManager.close(id),
+  startConnect,
+  refreshSave: (id) => void window.pond.refreshSave(id),
+  closeConnect: () => {
+    setTimeout(() => {
+      connectFlow.clear();
+      sourceFlow.close();
+    }, CLOSE_AFTER_CONNECT_MS);
+  },
+};
 
 export function notifyRefreshBlocked(
   action: WireSyncAction,
@@ -20,14 +38,22 @@ export function notifyRefreshBlocked(
 ): void {
   if (action.modelName !== "save") return;
   if (action.actorReason !== "pipeline:refresh-blocked") return;
-  const source = pool.get(action.modelId)?.source;
+  const saveId = action.modelId;
+  const source = pool.get(saveId)?.source;
   if (!source) return;
-  deps.notify({
+  // The connect dialog takes over, and the toast timer pauses while the
+  // app is in the background during sign-in, so close it here.
+  const signIn = () => {
+    deps.closeToast(toastId);
+    void deps.startConnect(source, () => {
+      deps.refreshSave(saveId);
+      deps.closeConnect();
+    });
+  };
+  const toastId = deps.notify({
     id: "refresh-blocked",
-    title: `Sign in to ${sourceLabel(source)} to refresh`,
-    description:
-      "Pond kept the current version. Refresh again after you sign in.",
-    action: { label: "Sign in", onClick: () => void deps.startConnect(source) },
+    title: `${sourceLabel(source)} needs a sign-in`,
+    action: { label: "Sign in", onClick: signIn },
     timeout: REFRESH_BLOCKED_TIMEOUT_MS,
   });
 }
