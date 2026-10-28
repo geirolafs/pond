@@ -103,6 +103,28 @@ const jsonLdProductImage: metascraper.Rules = {
       : undefined,
 };
 
+const OG_PRODUCT_TYPES = new Set(["product", "product.item", "product.group"]);
+/** Top-level microdata items; an item with itemprop is a property of another item, like an Offer. */
+const MICRODATA_ITEM_SELECTOR = "[itemscope][itemtype]:not([itemprop])";
+
+/** Shops without JSON-LD still mark product pages with og:type or schema.org microdata. */
+const pageMarkupProduct: metascraper.Rules = {
+  product: ({ htmlDom: $ }) => {
+    const ogType = $('meta[property="og:type"]').attr("content");
+    if (OG_PRODUCT_TYPES.has(ogType?.trim().toLowerCase() ?? "")) {
+      return PRODUCT_FLAG;
+    }
+    const isProductItem = $(MICRODATA_ITEM_SELECTOR)
+      .toArray()
+      .some((item) =>
+        ($(item).attr("itemtype") ?? "")
+          .split(/\s+/)
+          .some((type) => PRODUCT_TYPES.has(type.split("/").pop() ?? "")),
+      );
+    return isProductItem ? PRODUCT_FLAG : undefined;
+  },
+};
+
 function productsFromJsonLd(text: string): z.infer<typeof JsonLdProduct>[] {
   const parsed = z.json().safeParse(safeJsonParse(text));
   if (!parsed.success) return [];
@@ -132,6 +154,7 @@ const scrape = metascraper([
   metascraperDescription(),
   amazonProductImage,
   jsonLdProductImage,
+  pageMarkupProduct,
   metascraperImage(),
   metascraperLogoFavicon(),
   metascraperAuthor(),

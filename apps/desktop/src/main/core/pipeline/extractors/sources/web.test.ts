@@ -108,6 +108,39 @@ it("marks a JSON-LD product page as a product even without a product image", asy
   expect(capture.extras?.product).toBe(true);
 });
 
+it("marks a page with og:type product as a product", async () => {
+  const capture = await extractFrom(
+    "https://example.com/products/monograph",
+    `<html><head><meta property="og:type" content="product"><meta property="og:image" content="https://example.com/cover.png"></head></html>`,
+  );
+
+  expect(capture.media).toEqual([
+    { url: "https://example.com/cover.png", type: "image" },
+  ]);
+  expect(capture.extras?.product).toBe(true);
+});
+
+it("marks a page with a schema.org Product microdata item as a product", async () => {
+  const capture = await extractFrom(
+    "https://example.com/products/cookbook",
+    `<html><head><meta property="og:image" content="https://example.com/cover.jpg"></head><body><div itemscope itemtype="http://schema.org/Product"><div itemprop="offers" itemscope itemtype="http://schema.org/Offer"></div></div></body></html>`,
+  );
+
+  expect(capture.media).toEqual([
+    { url: "https://example.com/cover.jpg", type: "image" },
+  ]);
+  expect(capture.extras?.product).toBe(true);
+});
+
+it("ignores Product microdata nested as a property of another item", async () => {
+  const capture = await extractFrom(
+    "https://example.com/reviews/cookbook",
+    `<html><head><meta property="og:type" content="article"></head><body><article itemscope itemtype="https://schema.org/Review"><div itemprop="itemReviewed" itemscope itemtype="https://schema.org/Product"></div></article></body></html>`,
+  );
+
+  expect(capture.extras?.product).toBeUndefined();
+});
+
 it("finds a book cover inside a JSON-LD @graph with an ImageObject", async () => {
   const capture = await extractFrom(
     "https://example.com/thinking-in-systems",
