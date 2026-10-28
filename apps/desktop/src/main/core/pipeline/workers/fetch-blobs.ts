@@ -169,7 +169,7 @@ export async function runFetchBlobs(
     {
       actorReason: "pipeline:fetch-blobs",
       newFiles,
-      ...(replaceStale ? { replaceFilesWithKind: replaceKinds } : {}),
+      replaceFilesWithKind: replaceStale ? replaceKinds : undefined,
     },
   );
   const saved = await readSave(saveId);
