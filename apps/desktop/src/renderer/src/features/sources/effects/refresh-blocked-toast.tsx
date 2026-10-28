@@ -26,6 +26,8 @@ const liveDeps: RefreshBlockedDeps = {
   refreshSave: (id) => void window.pond.refreshSave(id),
   closeConnect: () => {
     const account = connectFlow.account();
+    // A new account still has to pick what to import; keep its step open.
+    if (account?.sync.importPending) return;
     setTimeout(() => {
       // A connection started since then owns the dialog now.
       if (connectFlow.account() !== account) return;
