@@ -12,7 +12,10 @@ import {
   libraryHeader,
   useViewPopover,
 } from "@/features/library/state/library-header";
-import { getViewState } from "@/features/library/state/view-store";
+import {
+  getViewState,
+  setSearchScope,
+} from "@/features/library/state/view-store";
 import type { ShortcutId } from "../../../../shared/shortcuts";
 import { AppHotkeys } from "./app-hotkeys";
 import { EditableHotkeyGuard } from "./editable-hotkey-guard";
@@ -143,6 +146,26 @@ describe("app hotkeys in text fields", () => {
       );
     });
     expect(attr("search")).toBe("open");
+  });
+
+  it("focuses current-view search on Mod+F", async () => {
+    const focusSearch = vi.spyOn(libraryHeader, "focusSearch");
+    setSearchScope("all");
+    await mount();
+    await act(async () => {
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "f",
+          metaKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+    expect(focusSearch).toHaveBeenCalledOnce();
+    expect(getViewState().searchScope).toBe("current");
+    expect(attr("search")).toBe("closed");
+    focusSearch.mockRestore();
   });
 
   it("leaves search to a field that handled the shortcut", async () => {

@@ -38,7 +38,7 @@ export function buildFindSection(context: AppMenuContext): AppMenuItem {
     submenu: [
       {
         label: "Search Current View",
-        accelerator: accelerator("library.search"),
+        accelerator: accelerator("library.find"),
         registerAccelerator: false,
         click: sendMenuAction("find.search"),
       },

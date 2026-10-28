@@ -45,6 +45,7 @@ import {
   patchPrefsSection,
   usePrefs,
 } from "@/shared/state/prefs";
+import { handleNativeMenuAction } from "./native-menu-actions";
 
 function scrollActiveViewport(position: "top" | "bottom"): void {
   const active = document.activeElement;
@@ -140,6 +141,11 @@ export function AppHotkeys() {
           commandMenu.toggle();
         },
         options: { ignoreInputs: false, preventDefault: false },
+      },
+      {
+        hotkey: bindingKeys(shortcuts, "library.find"),
+        callback: () => handleNativeMenuAction("find.search"),
+        options: { ignoreInputs: true },
       },
       {
         hotkey: bindingKeys(shortcuts, "app.settings"),

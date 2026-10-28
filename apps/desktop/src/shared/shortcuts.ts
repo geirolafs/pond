@@ -83,6 +83,11 @@ export const SHORTCUTS = {
     group: "Navigate",
   },
   "library.search": { keys: "Mod+K", label: "Search Pond", group: "Navigate" },
+  "library.find": {
+    keys: "Mod+F",
+    label: "Search Current View",
+    group: "Navigate",
+  },
   "app.settings": {
     keys: "Mod+,",
     label: "Settings",
