@@ -175,7 +175,7 @@
   font-variant-numeric: tabular-nums;
   color: var(--ds-gray-3);
   pointer-events: none;
-  background: rgb(0, 0, 0);
+  background: var(--ds-gray-a11);
   border-radius: var(--ds-radius-xs);
 }
 
