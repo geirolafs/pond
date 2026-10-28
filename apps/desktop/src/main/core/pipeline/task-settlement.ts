@@ -212,30 +212,33 @@ export async function handleFailure(
       settled: false,
     };
   }
-  /* A refresh that needs a sign-in waits a day; a save that already has files should not look like it is still saving in the meantime. */
+  /* A harvest that needs a sign-in waits a day. A refreshed save, or a capture that already has files, should not look like it is still saving in the meantime. */
   if (decision.status === "blocked" && task.op === "harvest_metadata") {
     const current = db
       .select({ status: saves.status, files: saves.files })
       .from(saves)
       .where(eq(saves.id, task.saveId))
       .get();
-    if (current?.status === "ingesting" && (current.files?.length ?? 0) > 0) {
+    const generation = task.generationId
+      ? db
+          .select({ kind: queueGenerations.kind })
+          .from(queueGenerations)
+          .where(eq(queueGenerations.id, task.generationId))
+          .get()
+      : undefined;
+    const refresh = generation?.kind === "refresh";
+    if (
+      current?.status === "ingesting" &&
+      (refresh || (current.files?.length ?? 0) > 0)
+    ) {
       /* The renderer tells the user to sign in only when the block came from a refresh they asked for. */
-      const generation = task.generationId
-        ? db
-            .select({ kind: queueGenerations.kind })
-            .from(queueGenerations)
-            .where(eq(queueGenerations.id, task.generationId))
-            .get()
-        : undefined;
       await persistSave(
         task.saveId,
         { status: "complete", ingestCompletedAt: new Date() },
         {
-          actorReason:
-            generation?.kind === "refresh"
-              ? "pipeline:refresh-blocked"
-              : "pipeline:blocked-keep-files",
+          actorReason: refresh
+            ? "pipeline:refresh-blocked"
+            : "pipeline:blocked-keep-files",
         },
       );
     }
