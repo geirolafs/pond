@@ -25,7 +25,10 @@ const liveDeps: RefreshBlockedDeps = {
   startConnect,
   refreshSave: (id) => void window.pond.refreshSave(id),
   closeConnect: () => {
+    const account = connectFlow.account();
     setTimeout(() => {
+      // A connection started since then owns the dialog now.
+      if (connectFlow.account() !== account) return;
       connectFlow.clear();
       sourceFlow.close();
     }, CLOSE_AFTER_CONNECT_MS);

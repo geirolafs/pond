@@ -92,6 +92,9 @@ export const connectFlow = {
   rejectSession(source: Source, reason: SessionImportFailureReason): void {
     markProblem(source, problemForReason(reason));
   },
+  account(): ConnectedAccount | null {
+    return store.state.account;
+  },
   clear(): void {
     onConnected = null;
     const waiting = store.state.waiting;
