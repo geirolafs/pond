@@ -276,11 +276,19 @@ async function crawlSite(
 
       navAttempts += 1;
       if (pages.length > 0) await sleep(PAGE_GAP_MS);
+      let mark = Date.now();
+      const phases: Record<string, number> = {};
+      const lap = (phase: string) => {
+        const at = Date.now();
+        phases[phase] = at - mark;
+        mark = at;
+      };
       const navOk = await navigateWithTimeout(
         lease.win,
         next.url,
         NAV_TIMEOUT_MS,
       );
+      lap("nav");
       if (!navOk) {
         log.info("[pond pipeline:archive-page] nav failed", {
           url: next.url,
@@ -289,16 +297,27 @@ async function crawlSite(
         continue;
       }
       await sleep(SETTLE_MS);
+      lap("settle");
       await autoScroll(lease.win.webContents);
-      await preloadImages(lease.win.webContents);
+      lap("scroll");
+      const images = await preloadImages(lease.win.webContents);
+      lap("preload");
       await recorder.waitForNetworkIdle(
         NETWORK_QUIET_MS,
         NETWORK_IDLE_BUDGET_MS,
       );
+      lap("idle");
       await recorder.captureFullBodies(
         await collectMediaUrls(lease.win.webContents),
       );
+      lap("bodies");
       await recorder.flush();
+      lap("flush");
+      log.info("[pond pipeline:archive-page] page phases", {
+        url: next.url,
+        images,
+        ...phases,
+      });
 
       const wc = lease.win.webContents;
       const finalUrl = wc.getURL();
@@ -359,7 +378,7 @@ async function crawlSite(
   return { pages, warcBytes };
 }
 
-async function preloadImages(wc: WebContents): Promise<void> {
+async function preloadImages(wc: WebContents): Promise<number | null> {
   const expr = `(async () => {
     const urls = new Set();
     const addSrcset = (v) => {
@@ -412,11 +431,14 @@ async function preloadImages(wc: WebContents): Promise<void> {
     return list.length;
   })()`;
   try {
-    await withTimeout(
+    const count = await withTimeout(
       wc.executeJavaScript(expr, true),
       IMAGE_PRELOAD_BUDGET_MS,
     );
-  } catch {}
+    return typeof count === "number" ? count : null;
+  } catch {
+    return null;
+  }
 }
 
 const MediaUrlsSchema = z
