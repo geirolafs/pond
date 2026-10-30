@@ -45,6 +45,38 @@ describe("video frame sampling", () => {
     expect(sampleFrameTimestamps(Number.NaN, 12)).toEqual([]);
   });
 
+  it("keeps the frames a video track has when audio runs longer", async () => {
+    const ffmpeg = binariesAvailable().ffmpeg;
+    if (!ffmpeg) throw new Error("Expected the bundled ffmpeg");
+    const root = await mkdtemp(join(tmpdir(), "pond-frame-fixture-"));
+    try {
+      const video = join(root, "long-audio.mp4");
+      await run(ffmpeg, [
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        "color=c=blue:s=640x480:d=2",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=440:duration=2.6",
+        "-pix_fmt",
+        "yuv420p",
+        video,
+      ]);
+
+      const extracted = await extractSampledFrames(video, 32, "embedding");
+      expect(extracted?.frames).toHaveLength(2);
+      expect(extracted?.timestamps).toEqual([0, 1]);
+      await extracted?.cleanup();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("cleans every extracted frame and fails closed", async () => {
     const ffmpeg = binariesAvailable().ffmpeg;
     if (!ffmpeg) throw new Error("Expected the bundled ffmpeg");

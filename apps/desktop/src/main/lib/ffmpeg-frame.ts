@@ -161,19 +161,27 @@ export async function extractSampledFrames(
       await cleanup();
       return null;
     }
-    const frames = await Promise.all(
+    const sizes = await Promise.all(
       paths.map(async (path) => {
-        const { size } = await stat(path);
-        return { path, mimeType: "image/jpeg", size };
+        /** The container can outlast the video track (longer audio), so fps sampling writes fewer frames than requested. */
+        if (strategy !== "embedding") return (await stat(path)).size;
+        return (await stat(path).catch(() => null))?.size ?? 0;
       }),
     );
-    if (frames.some((frame) => frame.size === 0)) {
+    const firstEmpty = sizes.indexOf(0);
+    const count = firstEmpty === -1 ? paths.length : firstEmpty;
+    if (count === 0 || (strategy !== "embedding" && count < paths.length)) {
       await cleanup();
       return null;
     }
+    const frames = paths.slice(0, count).map((path, index) => ({
+      path,
+      mimeType: "image/jpeg",
+      size: sizes[index] ?? 0,
+    }));
     return {
       frames,
-      timestamps,
+      timestamps: timestamps.slice(0, count),
       durationSec: sampledDurationSec,
       cleanup,
     };
