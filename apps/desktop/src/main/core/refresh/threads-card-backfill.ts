@@ -4,6 +4,7 @@ import { and, eq, inArray, isNull } from "drizzle-orm";
 import log from "electron-log/main.js";
 import pLimit from "p-limit";
 import { ulid } from "ulid";
+import type { Db } from "../../db";
 import { getDb } from "../../db";
 import { persistSave } from "../persist-save";
 import { kickReconciler } from "../pipeline/reconciler-client";
@@ -22,6 +23,18 @@ interface BackfillRow {
   id: string;
   source: "twitter" | "threads";
 }
+
+interface ReplyRecaptureRuntime {
+  getDb: () => Promise<Db>;
+  kickReconciler: () => void;
+  persistSave: typeof persistSave;
+}
+
+const defaultRuntime: ReplyRecaptureRuntime = {
+  getDb,
+  kickReconciler,
+  persistSave,
+};
 
 export async function startThreadsCardBackfill(): Promise<{
   ok: true;
@@ -97,11 +110,12 @@ function needsLiveReplyRecapture(rawJson: RawJson | null): boolean {
 }
 
 /** Live screenshots hit X and Threads, so each stale reply is requeued at most once. */
-async function requeueReplyCaptures(
+export async function requeueReplyCaptures(
   rows: readonly BackfillRow[],
+  runtime: ReplyRecaptureRuntime = defaultRuntime,
 ): Promise<number> {
   if (rows.length === 0) return 0;
-  const db = await getDb();
+  const db = await runtime.getDb();
   const now = new Date();
   const existingRows = db
     .select({ id: tasks.id, saveId: tasks.saveId, op: tasks.op })
@@ -136,6 +150,7 @@ async function requeueReplyCaptures(
             status: "pending",
             attempts: 0,
             maxAttempts: maxAttemptsFor(op),
+            generationId: null,
             lastError: null,
             nextRunAt: now,
             updatedAt: now,
@@ -164,7 +179,7 @@ async function requeueReplyCaptures(
       ...next.capture.extras,
       replyRecaptureQueued: true,
     };
-    await persistSave(
+    await runtime.persistSave(
       row.id,
       {
         rawJson: next,
@@ -177,6 +192,6 @@ async function requeueReplyCaptures(
     queued += 1;
   }
 
-  if (queued > 0) kickReconciler();
+  if (queued > 0) runtime.kickReconciler();
   return queued;
 }
